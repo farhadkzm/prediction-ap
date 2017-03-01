@@ -1,14 +1,7 @@
 Extracting Newtown data from workcenter 266095:
 
-`cat data.csv | grep ^\"266095\" | grep \"NEWTOWN\" > newtown_data.csv`
+`cat data.csv | grep ^\"266095\" | grep \"NEWTOWN\" | grep -v ',,' | shuf | sed 's/\"//g' > newtown_data.csv`
 
-Randomising the lines in the file
-
-`cat newtown_data.csv | shuf  > newtown_data_randomised.csv`
-
-Removing the double quotes 
-
-`sed 's/\"//g' newtown_data_randomised.csv > newtown_cleansed.csv`
 
 Extracting training data and test data (no. of lines is 17303)
 
