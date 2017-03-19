@@ -1,118 +1,105 @@
-import pandas as pd
 import tensorflow as tf
-import tempfile
 import numpy as np
-train_file = open("./data/train.csv", "r")
-test_file = open("./data/test.csv", "r")
+import delivery_data_reader
+from datetime import datetime
+import logging
 
-COLUMNS = ["WORK_CENTRE_CD", "ARTICLE_ID", "PRODUCT_CD", "RECEIVER_SUBURB", "THOROUGHFARE_TYPE_CODE", "SIDE",
-           "RECEIVER_DPID", "ADDRESS_CLUSTER", "SCAN_EVENT_CD", "DEVICE_USER_ID", "SCAN_SOURCE_DEVICE", "USER_ROLE",
-           "CONTRACT_ID", "EVENT_TIMESTAMP", "DELIVERY_DATE", "DELIVERY_WEEKDAY", "DELIVERY_TIME", "ACCEPT_TIME",
-           "NUMERIC_TIME"]
+logging.basicConfig(level=logging.DEBUG)
+logging.getLogger('tensorflow').setLevel(logging.ERROR)
 
-DTYPE = { "PRODUCT_CD": str,
-          "RECEIVER_SUBURB": str,
-          "THOROUGHFARE_TYPE_CODE": str,
-          "SIDE": str,
-          "RECEIVER_DPID": str,
-          "ADDRESS_CLUSTER": str,
-          "DEVICE_USER_ID": str,
-          "USER_ROLE": str,
-          "CONTRACT_ID": str,
-          "DELIVERY_WEEKDAY": str,
-          "NUMERIC_TIME": str,
-          "ACCEPT_TIME": str,
-          }
-df_train = pd.read_csv(train_file, names=COLUMNS, dtype=DTYPE, skipinitialspace=True)
-df_test = pd.read_csv(test_file, names=COLUMNS,dtype=DTYPE, skipinitialspace=True, skiprows=1)
+max_row_size = 50000
 
-RESULT_COLUMN = "RESULT"
-# df_train["ACCEPT_TIME_NUMERIC_TIME"] = (
-#     df_train["ACCEPT_TIME"].apply(lambda x: float(x.split(":")[1]) / 60.0 + float(x.split(":")[0]))).astype(float)
+learning_rate = 0.002
 
-df_train["RESULT"] = (
-    df_train["NUMERIC_TIME"].apply(lambda x: str(int(float(x)/2)))).astype(str)
+fit_max_steps = 2000
+evaluate_steps = 100
+batch_data_size = 500
 
+# semi-constant variables
+log_path = './logdir/tf_logs/' + datetime.now().strftime('%Y_%m_%d__%H_%M_%S')
 
-# df_test["ACCEPT_TIME_NUMERIC_TIME"] = (
-#     df_test["ACCEPT_TIME"].apply(lambda x: float(x.split(":")[1]) / 60.0 + float(x.split(":")[0]))).astype(float)
+# delivery_data_reader.initialise_data('./data/train.csv','./data/test.csv','./data/gen')
 
-df_test["RESULT"] = (
-    df_test["NUMERIC_TIME"].apply(lambda x: str(int(float(x)/2)))).astype(str)
+dics = delivery_data_reader.read_files('./data/gen')
+
+test_x = dics['test_x']
+test_y = dics['test_y']
+cv_x = dics['cv_x']
+cv_y = dics['cv_y']
+train_x = dics['train_x']
+train_y = dics['train_y']
+
+train_rows = len(train_x.index)
+total_iterations = int(train_rows / batch_data_size)
 
 
+def input_fn(input_x, input_y):
+    continuous_cols = {
+        feature_name: tf.constant(input_x[feature_name].values, shape=[len(input_x[feature_name].values)],
+                                  verify_shape=True) for feature_name in input_x.columns}
+    label = tf.constant(input_y.values, shape=[len(input_y.values)], verify_shape=True)
+
+    return continuous_cols, label
 
 
-CATEGORICAL_COLUMNS = [
-    "PRODUCT_CD", "RECEIVER_SUBURB", "THOROUGHFARE_TYPE_CODE", "SIDE",
-    "RECEIVER_DPID", "ADDRESS_CLUSTER", "DEVICE_USER_ID", "USER_ROLE", "CONTRACT_ID", "DELIVERY_WEEKDAY"]
-
-product_code = tf.contrib.layers.sparse_column_with_hash_bucket("PRODUCT_CD", hash_bucket_size=1000)
-receiver_suburb = tf.contrib.layers.sparse_column_with_hash_bucket("RECEIVER_SUBURB", hash_bucket_size=1000)
-thoroughfare_type_code = tf.contrib.layers.sparse_column_with_hash_bucket("THOROUGHFARE_TYPE_CODE",
-                                                                          hash_bucket_size=1000)
-side = tf.contrib.layers.sparse_column_with_hash_bucket("SIDE", hash_bucket_size=3)
-receiver_dpid = tf.contrib.layers.sparse_column_with_hash_bucket("RECEIVER_DPID", hash_bucket_size=1000)
-address_cluster = tf.contrib.layers.sparse_column_with_hash_bucket("ADDRESS_CLUSTER", hash_bucket_size=1000)
-device_user_id = tf.contrib.layers.sparse_column_with_hash_bucket("DEVICE_USER_ID", hash_bucket_size=1000)
-user_role = tf.contrib.layers.sparse_column_with_hash_bucket("USER_ROLE", hash_bucket_size=1000)
-contract_id = tf.contrib.layers.sparse_column_with_hash_bucket("CONTRACT_ID", hash_bucket_size=1000)
-delivery_weekday = tf.contrib.layers.sparse_column_with_hash_bucket("DELIVERY_WEEKDAY", hash_bucket_size=8)
-
-# receiver_suburb_x_weekday = tf.contrib.layers.crossed_column(
-#     [receiver_suburb, delivery_weekday], hash_bucket_size=int(1e6))
-
-# CONTINUOUS_COLUMNS = ["ACCEPT_TIME_NUMERIC_TIME"]
+def train_input_fn(index=0, batch_size=train_rows):
+    logging.debug('Reading %s rows for step %s', batch_size, index + 1)
+    start = index * batch_size
+    end = start + batch_size
+    return input_fn(train_x[start:end], train_y[start:end])
 
 
-# accept_numeric_time = tf.contrib.layers.real_valued_column("ACCEPT_TIME_NUMERIC_TIME")
+def test_input_fn():
+    return input_fn(test_x, test_y)
+
+
+# estimator = tf.contrib.learn.LinearRegressor(feature_columns=
+#                                              [tf.contrib.layers.real_valued_column(col_name) for col_name in
+#                                               train_x.columns])
 #
-
-def input_fn(df):
-    # Creates a dictionary mapping from each continuous feature column name (k) to
-    # the values of that column stored in a constant Tensor.
-    continuous_cols = {}
-    # continuous_cols = {k: tf.constant(df[k].values, shape=[df[k].size, 1])
-    #                    for k in CONTINUOUS_COLUMNS}
-    # Creates a dictionary mapping from each categorical feature column name (k)
-    # to the values of that column stored in a tf.SparseTensor.
-    categorical_cols = {k: tf.SparseTensor(
-        indices=[[i, 0] for i in range(df[k].size)],
-        values=df[k].values,
-        dense_shape=[df[k].size, 1])
-                        for k in CATEGORICAL_COLUMNS}
-    # Merges the two dictionaries into one.
-    feature_cols = dict(continuous_cols.items() + categorical_cols.items())
-    # Converts the label column into a constant Tensor.
-    label = tf.constant(df[RESULT_COLUMN].values, shape=[df[RESULT_COLUMN].size, 1])
-    # Returns the feature columns and the label.
-    return feature_cols, label
+estimator = tf.contrib.learn.DNNRegressor(
+    feature_columns=[tf.contrib.layers.real_valued_column(col_name) for col_name in
+                     train_x.columns],
+    hidden_units=[len(train_x.columns), 512, 256])
 
 
-def train_input_fn():
-    return input_fn(df_train)
+def time_window_error(summary):
+    predicted = estimator.predict(input_fn=test_input_fn)
+
+    predicted = np.array(list(predicted))
+    error_count = (abs(predicted - np.array(test_y.values)) > 2).sum()
+    error = float(error_count) / len(predicted)
+    logging.debug('Window Error for TEST: %s/%s ratio: %s', error_count, len(predicted), error)
+    summary.value.add(tag='outliers', simple_value=error)
 
 
-def eval_input_fn():
-    return input_fn(df_test)
+with tf.Session() as sess:
+    sess.run(tf.global_variables_initializer())
+    writer = tf.summary.FileWriter(log_path, sess.graph)
 
+    for i in range(total_iterations):
+        logging.debug('Starting fitting for step %s', i + 1)
+        estimator.partial_fit(input_fn=(lambda: train_input_fn(i, batch_data_size)))
 
-model_dir = tempfile.mkdtemp()
-m = tf.contrib.learn.LinearClassifier(feature_columns=[
-    product_code,
-    receiver_suburb,
-    thoroughfare_type_code,
-    side,
-    receiver_dpid,
-    address_cluster,
-    device_user_id,
-    user_role,
-    contract_id,
-    delivery_weekday,
-],
-    model_dir=model_dir)
+        if True:
+            logging.debug('Aggregating statistics...')
+            summary = tf.Summary()
 
-m.fit(input_fn=train_input_fn, steps=200)
-results = m.evaluate(input_fn=eval_input_fn, steps=1)
-for key in sorted(results):
-    print "%s: %s" % (key, results[key])
+            # getting losses for test and train
+            logging.debug('Loss Eval for TRAIN')
+            train_evaluation = estimator.evaluate(input_fn=train_input_fn, steps=evaluate_steps)
+            summary.value.add(tag='train_loss', simple_value=train_evaluation['loss'])
+
+            logging.debug('Loss Eval for TEST')
+            test_evaluation = estimator.evaluate(input_fn=test_input_fn, steps=evaluate_steps)
+            summary.value.add(tag='test_loss', simple_value=test_evaluation['loss'])
+
+            # getting window_error for test
+            logging.debug('Window Eval for Test')
+            time_window_error(summary)
+            writer.add_summary(summary, global_step=i)
+            logging.debug('writing metrics')
+            writer.flush()
+
+    writer.close()
+print 'Processed finished'
