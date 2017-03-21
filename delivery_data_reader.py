@@ -8,20 +8,31 @@ import logging
 # DEVICE_USER_ID,EVENT_TIMESTAMP,NUMERIC_TIME,PRODUCT_CD,
 # RECEIVER_DPID,RECEIVER_SUBURB,SCAN_EVENT_CD,SCAN_SOURCE_DEVICE,
 # SIDE,THOROUGHFARE_TYPE_CODE,USER_ROLE,WORK_CENTRE_CD
-feature_names = ['ACCEPT_TIME',
-                 'NUMERIC_TIME',
-                 'DELIVERY_WEEKDAY',
-                 'CONTRACT_ID',
-                 'USER_ROLE',
-                 'DEVICE_USER_ID',
-                 'SCAN_EVENT_CD',
-                 'PRODUCT_CD',
-                 'RECEIVER_SUBURB',
-                 'THOROUGHFARE_TYPE_CODE',
-                 'SIDE']
+feature_names = [
+    'ACCEPT_TIME',
+    'NUMERIC_TIME',
+    'DELIVERY_WEEKDAY',
+    'CONTRACT_ID',
+    'USER_ROLE',
+    'DEVICE_USER_ID',
+    'SCAN_EVENT_CD',
+    'PRODUCT_CD',
+    'RECEIVER_SUBURB',
+    'THOROUGHFARE_TYPE_CODE',
+    'SIDE'
+]
 
-bucketised_columns = ['DELIVERY_WEEKDAY', 'CONTRACT_ID', 'USER_ROLE', 'DEVICE_USER_ID', 'SCAN_EVENT_CD', 'PRODUCT_CD',
-                      'RECEIVER_SUBURB', 'THOROUGHFARE_TYPE_CODE', 'SIDE']
+bucketised_columns = [
+    'DELIVERY_WEEKDAY',
+    'CONTRACT_ID',
+    'USER_ROLE',
+    'DEVICE_USER_ID',
+    'SCAN_EVENT_CD',
+    'PRODUCT_CD',
+    'RECEIVER_SUBURB',
+    'THOROUGHFARE_TYPE_CODE',
+    'SIDE'
+]
 
 
 def __convert_time_to_float(value):
@@ -32,14 +43,15 @@ def __convert_time_to_float(value):
 converters_map = {'ACCEPT_NUMERIC': ('ACCEPT_TIME', __convert_time_to_float)}
 
 
-def __read_data(data_path):
-    return data_reader.read_data(data_path, feature_names, 'NUMERIC_TIME', bucketised_columns, converters_map)
+def __read_data(data_path, limit=None):
+    return data_reader.read_data(data_path, feature_names, 'NUMERIC_TIME', bucketised_columns, converters_map,
+                                 limit=limit)
 
 
-def initialise_data(train_path, test_path, out_dir_path):
+def initialise_data(train_path, test_path, out_dir_path, train_size=None, test_size=None, write=False):
     # reading data
-    train_x, train_y = __read_data(train_path)
-    testcv_x, testcv_y = __read_data(test_path)
+    train_x, train_y = __read_data(train_path, train_size)
+    testcv_x, testcv_y = __read_data(test_path, test_size)
 
     data_reader.make_compatible(testcv_x, train_x)
 
@@ -56,10 +68,12 @@ def initialise_data(train_path, test_path, out_dir_path):
              'train_x': train_x,
              'train_y': train_y,
              }
+    if write:
+        for fl in files.keys():
+            df = files[fl]
+            df.to_csv("{}/{}.csv".format(out_dir_path, fl))
 
-    for fl in files.keys():
-        df = files[fl]
-        df.to_csv("{}/{}.csv".format(out_dir_path, fl))
+    return files
 
 
 def read_files(out_dir_path):
@@ -74,7 +88,7 @@ def read_files(out_dir_path):
         fls[fl] = df
     for fl in y:
         logging.debug('Reading file %s...', fl)
-        ser = pd.read_csv("{}/{}.csv".format(out_dir_path, fl), usecols=[1], squeeze=True)
+        ser = pd.read_csv("{}/{}.csv".format(out_dir_path, fl), usecols=[1], squeeze=True, header=False)
         fls[fl] = ser
 
     return fls

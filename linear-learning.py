@@ -7,20 +7,18 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('tensorflow').setLevel(logging.ERROR)
 
-max_row_size = 50000
-
-learning_rate = 0.002
-
-fit_max_steps = 2000
 evaluate_steps = 100
 batch_data_size = 500
-
+train_row_size = 10000
+testcv_row_size = 5000
 # semi-constant variables
 log_path = './logdir/tf_logs/' + datetime.now().strftime('%Y_%m_%d__%H_%M_%S')
 
-# delivery_data_reader.initialise_data('./data/train.csv','./data/test.csv','./data/gen')
+dics = delivery_data_reader.initialise_data('./data/train.csv',
+                                            './data/test.csv',
+                                            './data/gen', train_row_size, testcv_row_size)
 
-dics = delivery_data_reader.read_files('./data/gen')
+# dics = delivery_data_reader.read_files('./data/gen')
 
 test_x = dics['test_x']
 test_y = dics['test_y']
@@ -43,34 +41,39 @@ def input_fn(input_x, input_y):
 
 
 def train_input_fn(index=0, batch_size=train_rows):
-    logging.debug('Reading %s rows for step %s', batch_size, index + 1)
+    logging.debug('Reading the next %s rows', batch_size)
     start = index * batch_size
     end = start + batch_size
     return input_fn(train_x[start:end], train_y[start:end])
+
+
+def train_eval_input_fn():
+    return input_fn(train_x, train_y)
 
 
 def test_input_fn():
     return input_fn(test_x, test_y)
 
 
-# estimator = tf.contrib.learn.LinearRegressor(feature_columns=
-#                                              [tf.contrib.layers.real_valued_column(col_name) for col_name in
-#                                               train_x.columns])
+# estimator = tf.contrib.learn.LinearRegressor(
+#     feature_columns=[tf.contrib.layers.real_valued_column(col_name) for col_name in
+#                      train_x.columns])
 #
+
 estimator = tf.contrib.learn.DNNRegressor(
     feature_columns=[tf.contrib.layers.real_valued_column(col_name) for col_name in
                      train_x.columns],
     hidden_units=[len(train_x.columns), 512, 256])
 
 
-def time_window_error(summary):
+def time_window_error(summary_op):
     predicted = estimator.predict(input_fn=test_input_fn)
 
     predicted = np.array(list(predicted))
     error_count = (abs(predicted - np.array(test_y.values)) > 2).sum()
     error = float(error_count) / len(predicted)
-    logging.debug('Window Error for TEST: %s/%s ratio: %s', error_count, len(predicted), error)
-    summary.value.add(tag='outliers', simple_value=error)
+    logging.debug('Window Error for TEST: %s/%s ratio: %s', error_count, len(predicted), "{0:.2f}".format(error))
+    summary_op.value.add(tag='outliers', simple_value=error)
 
 
 with tf.Session() as sess:
@@ -78,7 +81,7 @@ with tf.Session() as sess:
     writer = tf.summary.FileWriter(log_path, sess.graph)
 
     for i in range(total_iterations):
-        logging.debug('Starting fitting for step %s', i + 1)
+        logging.debug('Starting fitting for step %s/%s', i + 1, total_iterations)
         estimator.partial_fit(input_fn=(lambda: train_input_fn(i, batch_data_size)))
 
         if True:
@@ -86,16 +89,16 @@ with tf.Session() as sess:
             summary = tf.Summary()
 
             # getting losses for test and train
-            logging.debug('Loss Eval for TRAIN')
-            train_evaluation = estimator.evaluate(input_fn=train_input_fn, steps=evaluate_steps)
+            logging.debug('Processing Train Loss')
+            train_evaluation = estimator.evaluate(input_fn=train_eval_input_fn, steps=evaluate_steps)
             summary.value.add(tag='train_loss', simple_value=train_evaluation['loss'])
 
-            logging.debug('Loss Eval for TEST')
+            logging.debug('Processing Test Loss')
             test_evaluation = estimator.evaluate(input_fn=test_input_fn, steps=evaluate_steps)
             summary.value.add(tag='test_loss', simple_value=test_evaluation['loss'])
 
             # getting window_error for test
-            logging.debug('Window Eval for Test')
+            logging.debug('Processing Test Outliers')
             time_window_error(summary)
             writer.add_summary(summary, global_step=i)
             logging.debug('writing metrics')
