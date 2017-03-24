@@ -1,22 +1,56 @@
-import tensorflow as tf
-import numpy as np
-import delivery_data_reader
-from datetime import datetime
 import logging
+from datetime import datetime
+
+import numpy as np
+import tensorflow as tf
+
+import delivery_data_reader
+
+# all columns
+# ACCEPT_TIME,ADDRESS_CLUSTER,ARTICLE_ID,
+# CONTRACT_ID,DELIVERY_DATE,DELIVERY_TIME,DELIVERY_WEEKDAY,
+# DEVICE_USER_ID,EVENT_TIMESTAMP,NUMERIC_TIME,PRODUCT_CD,
+# RECEIVER_DPID,RECEIVER_SUBURB,SCAN_EVENT_CD,SCAN_SOURCE_DEVICE,
+# SIDE,THOROUGHFARE_TYPE_CODE,USER_ROLE,WORK_CENTRE_CD
+feature_names = [
+    'ACCEPT_TIME',
+    'NUMERIC_TIME',
+    'DELIVERY_WEEKDAY',
+    'CONTRACT_ID',
+    'USER_ROLE',
+    'DEVICE_USER_ID',
+    'SCAN_EVENT_CD',
+    'PRODUCT_CD',
+    'RECEIVER_SUBURB',
+    'THOROUGHFARE_TYPE_CODE',
+    'SIDE'
+]
+
+bucketised_columns = [
+    'DELIVERY_WEEKDAY',
+    'CONTRACT_ID',
+    'USER_ROLE',
+    'DEVICE_USER_ID',
+    'SCAN_EVENT_CD',
+    'PRODUCT_CD',
+    'RECEIVER_SUBURB',
+    'THOROUGHFARE_TYPE_CODE',
+    'SIDE'
+]
+
+num_groups, group_pick_size = 10, 3000
+
+evaluate_steps = 100
+batch_data_size = 100
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('tensorflow').setLevel(logging.ERROR)
 
-evaluate_steps = 100
-batch_data_size = 500
-train_row_size = 10000
-testcv_row_size = 5000
 # semi-constant variables
 log_path = './logdir/tf_logs/' + datetime.now().strftime('%Y_%m_%d__%H_%M_%S')
 
-dics = delivery_data_reader.initialise_data('./data/train.csv',
-                                            './data/test.csv',
-                                            './data/gen', train_row_size, testcv_row_size)
+dics = delivery_data_reader.initialise_data('./data/train.csv', './data/gen', feature_names, bucketised_columns,
+                                            num_groups, group_pick_size)
 
 # dics = delivery_data_reader.read_files('./data/gen')
 

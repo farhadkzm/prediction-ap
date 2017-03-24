@@ -1,38 +1,8 @@
-import data_reader
-import pandas as pd
 import logging
 
-# all columns
-# ACCEPT_TIME,ADDRESS_CLUSTER,ARTICLE_ID,
-# CONTRACT_ID,DELIVERY_DATE,DELIVERY_TIME,DELIVERY_WEEKDAY,
-# DEVICE_USER_ID,EVENT_TIMESTAMP,NUMERIC_TIME,PRODUCT_CD,
-# RECEIVER_DPID,RECEIVER_SUBURB,SCAN_EVENT_CD,SCAN_SOURCE_DEVICE,
-# SIDE,THOROUGHFARE_TYPE_CODE,USER_ROLE,WORK_CENTRE_CD
-feature_names = [
-    'ACCEPT_TIME',
-    'NUMERIC_TIME',
-    'DELIVERY_WEEKDAY',
-    'CONTRACT_ID',
-    'USER_ROLE',
-    'DEVICE_USER_ID',
-    'SCAN_EVENT_CD',
-    'PRODUCT_CD',
-    'RECEIVER_SUBURB',
-    'THOROUGHFARE_TYPE_CODE',
-    'SIDE'
-]
+import pandas as pd
 
-bucketised_columns = [
-    'DELIVERY_WEEKDAY',
-    'CONTRACT_ID',
-    'USER_ROLE',
-    'DEVICE_USER_ID',
-    'SCAN_EVENT_CD',
-    'PRODUCT_CD',
-    'RECEIVER_SUBURB',
-    'THOROUGHFARE_TYPE_CODE',
-    'SIDE'
-]
+import data_reader
 
 
 def __convert_time_to_float(value):
@@ -43,22 +13,26 @@ def __convert_time_to_float(value):
 converters_map = {'ACCEPT_NUMERIC': ('ACCEPT_TIME', __convert_time_to_float)}
 
 
-def __read_data(data_path, limit=None):
-    return data_reader.read_data(data_path, feature_names, 'NUMERIC_TIME', bucketised_columns, converters_map,
-                                 limit=limit)
+def __read_data(data_path, feature_names, bucketised_columns, num_groups, group_pick_size):
+    return data_reader.read_prepared_data(data_path, feature_names, num_groups, group_pick_size,
+                                          bucketised_columns, converters_map)
 
 
-def initialise_data(train_path, test_path, out_dir_path, train_size=None, test_size=None, write=False):
+def initialise_data(train_path, out_dir_path,
+                    feature_names, bucketised_columns,
+                    num_groups, group_pick_size,
+                    write=False):
     # reading data
-    train_x, train_y = __read_data(train_path, train_size)
-    testcv_x, testcv_y = __read_data(test_path, test_size)
+    train_set, cv_set, test_set = __read_data(train_path,
+                                              feature_names, bucketised_columns,
+                                              num_groups, group_pick_size)
 
-    data_reader.make_compatible(testcv_x, train_x)
+    train_x, train_y = data_reader.split_x_y(train_set, 'NUMERIC_TIME')
+    cv_x, cv_y = data_reader.split_x_y(cv_set, 'NUMERIC_TIME')
+    test_x, test_y = data_reader.split_x_y(test_set, 'NUMERIC_TIME')
 
-    # splitting data into different sets
-    ratios = [.5]
-    test_x, cv_x = data_reader.split_data(testcv_x, ratios)
-    test_y, cv_y = data_reader.split_data(testcv_y, ratios)
+    data_reader.make_compatible(cv_x, train_x)
+    data_reader.make_compatible(test_x, train_x)
 
     # writing data to file
     files = {'test_x': test_x,
