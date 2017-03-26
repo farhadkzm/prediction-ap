@@ -7,13 +7,12 @@ import etl
 
 
 def read_csv(data_path, imported_cols, limit=None):
-    logging.debug('Reading csv file %s', data_path)
-    df = pd.read_csv(data_path, usecols=imported_cols, nrows=limit)
+    df = pd.read_csv(data_path, usecols=imported_cols)
     total_rows = len(df.index)
 
     df.dropna(inplace=True)
     removed_rows = total_rows - len(df.index)
-    logging.debug('total rows: %s - Removed: %s - file %s', total_rows, removed_rows, data_path)
+    logging.debug('After dropping NA. Rows: total %s - Removed %s', total_rows, removed_rows)
 
     return df
 
@@ -51,37 +50,44 @@ def __prepare_data(df, bck_columns=None, converters=None):
         logging.debug('Applying converters on columns')
         convert_columns(df, converters)
 
-    return df
-
 
 def read_prepared_data(data_path, imported_cols=None, num_groups=10, group_pick_size=3000, bck_columns=None,
                        converters=None):
-    df = read_csv(data_path, imported_cols, None)
+    logging.debug('Reading csv file %s', data_path)
+    df = read_csv(data_path, imported_cols)
 
     groupby_col = 'RECEIVER_SUBURB'
-    grouped = etl.smart_split(df, groupby_col, num_groups, group_pick_size)
+    working_set = etl.smart_split(df, groupby_col, num_groups, group_pick_size)
 
-    logging.debug("Splitting/converting train data...")
+    grouped = working_set.groupby(groupby_col)
 
     testcv_ratio = .4
 
     testcv_group_pick_size = int(group_pick_size * testcv_ratio)
     train_group_pick_size = group_pick_size - testcv_group_pick_size
 
+    logging.debug('Grouping %s. Items in each group %s. CV/Test items %s. Train items %s', groupby_col, group_pick_size,
+                  testcv_group_pick_size, train_group_pick_size)
+
     testcv_set = grouped.head(testcv_group_pick_size)
-    train_set = grouped.tail(train_group_pick_size)
+    train_set = grouped.tail(train_group_pick_size).copy()
 
     test_group_pick = int(testcv_group_pick_size * .5)
     cv_group_pick = testcv_group_pick_size - test_group_pick
 
-    test_set = testcv_set.groupby(groupby_col).head(test_group_pick)
-    cv_set = testcv_set.groupby(groupby_col).tail(cv_group_pick)
+    testcv_grouped = testcv_set.groupby(groupby_col)
+    test_set = testcv_grouped.head(test_group_pick).copy()
+    cv_set = testcv_grouped.tail(cv_group_pick).copy()
 
-    test_set = __prepare_data(test_set, bck_columns, converters)
-    cv_set = __prepare_data(cv_set, bck_columns, converters)
+    logging.debug('Preparing test set...')
+    __prepare_data(test_set, bck_columns, converters)
+    logging.debug('Preparing cv set...')
+    __prepare_data(cv_set, bck_columns, converters)
+    logging.debug('Preparing train set...')
+    __prepare_data(train_set, bck_columns, converters)
 
-    logging.debug("Splitting/converting test/cv data...")
-    train_set = __prepare_data(train_set, bck_columns, converters)
+    make_compatible(cv_set, train_set)
+    make_compatible(test_set, train_set)
     return train_set, cv_set, test_set
 
 
@@ -97,7 +103,6 @@ def make_compatible(cv, train):
 
 
 def split_x_y(df, label_column):
-    logging.debug('Splitting columns for x and y')
     y = df[label_column]
     df.drop(label_column, axis=1, inplace=True)
     x = df

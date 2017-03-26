@@ -13,20 +13,15 @@ def __convert_time_to_float(value):
 converters_map = {'ACCEPT_NUMERIC': ('ACCEPT_TIME', __convert_time_to_float)}
 
 
-def __read_data(data_path, feature_names, bucketised_columns, num_groups, group_pick_size):
-    return data_reader.read_prepared_data(data_path, feature_names, num_groups, group_pick_size,
-                                          bucketised_columns, converters_map)
-
-
 def initialise_data(train_path, out_dir_path,
                     feature_names, bucketised_columns,
                     num_groups, group_pick_size,
                     write=False):
     # reading data
-    train_set, cv_set, test_set = __read_data(train_path,
-                                              feature_names, bucketised_columns,
-                                              num_groups, group_pick_size)
+    train_set, cv_set, test_set = data_reader.read_prepared_data(train_path, feature_names, num_groups, group_pick_size,
+                                                                 bucketised_columns, converters_map)
 
+    logging.debug('Splitting columns for x and y')
     train_x, train_y = data_reader.split_x_y(train_set, 'NUMERIC_TIME')
     cv_x, cv_y = data_reader.split_x_y(cv_set, 'NUMERIC_TIME')
     test_x, test_y = data_reader.split_x_y(test_set, 'NUMERIC_TIME')
