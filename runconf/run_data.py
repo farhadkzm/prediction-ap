@@ -7,6 +7,7 @@ def get_data(feature_names, bucketised_columns,
              num_groups, group_pick_size):
     RunData = collections.namedtuple('RunData', ['train_x',
                                                  'test_y',
+                                                 'cv_y',
                                                  'train_batch_input_fn',
                                                  'train_eval_input_fn',
                                                  'cv_eval_input_fn',
@@ -17,6 +18,7 @@ def get_data(feature_names, bucketised_columns,
 
     run_config = RunData(dics['train_x']
                          , dics['test_y']
+                         , dics['cv_y']
                          , lambda index, batch_size: train_input_fn(dics['train_x'], dics['train_y'], index, batch_size)
                          , lambda: input_fn(dics['train_x'], dics['train_y'])
                          , lambda: input_fn(dics['cv_x'], dics['cv_y'])

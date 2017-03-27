@@ -9,7 +9,6 @@ import runconf.run_conf1 as run_conf
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('tensorflow').setLevel(logging.ERROR)
 
-
 rc = run_conf.get_run_conf()
 feature_names = rc.feature_names
 
@@ -24,22 +23,20 @@ batch_data_size = rc.batch_data_size
 run_name = rc.run_name
 data_config = rc.data_config
 
-
 # semi-constant variables
 log_path = './logdir/tf_logs/' + datetime.now().strftime('%Y_%m_%d__%H_%M_%S') + '_' + run_name
 
 train_x = data_config.train_x
-test_y = data_config.test_y
 train_rows = len(train_x.index)
 total_iterations = int(train_rows / batch_data_size)
 estimator = rc.estimator
 
 
 def time_window_error(summary_op):
-    predicted = estimator.predict(input_fn=data_config.test_eval_input_fn)
+    predicted = estimator.predict(input_fn=data_config.cv_eval_input_fn)
 
     predicted = np.array(list(predicted))
-    error_count = (abs(predicted - np.array(test_y.values)) > 2).sum()
+    error_count = (abs(predicted - np.array(data_config.cv_y.values)) > 2).sum()
     error = float(error_count) / len(predicted)
     logging.debug('Window Error for TEST: %s/%s ratio: %s', error_count, len(predicted), "{0:.2f}".format(error))
     summary_op.value.add(tag='outliers', simple_value=error)
@@ -53,7 +50,7 @@ with tf.Session() as sess:
         logging.debug('Starting fitting for step %s/%s', i + 1, total_iterations)
         estimator.partial_fit(input_fn=(lambda: data_config.train_batch_input_fn(i, batch_data_size)))
 
-        if True:
+        if i % 5 == 0:
             logging.debug('Aggregating statistics...')
             summary = tf.Summary()
 

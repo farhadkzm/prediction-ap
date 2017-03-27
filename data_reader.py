@@ -6,15 +6,8 @@ import pandas as pd
 import etl
 
 
-def read_csv(data_path, imported_cols, limit=None):
-    df = pd.read_csv(data_path, usecols=imported_cols)
-    total_rows = len(df.index)
-
-    df.dropna(inplace=True)
-    removed_rows = total_rows - len(df.index)
-    logging.debug('After dropping NA. Rows: total %s - Removed %s', total_rows, removed_rows)
-
-    return df
+def read_csv(data_path, imported_cols):
+    return pd.read_csv(data_path, usecols=imported_cols)
 
 
 def __add_unique_values_as_columns(df, column):
@@ -44,10 +37,10 @@ def __prepare_data(df, bck_columns=None, converters=None):
     if bck_columns is not None:
         bucketised_columns(df, bck_columns)
 
-    logging.debug('Added columns after bucketisation: %s', len(df.columns) - total_columns)
+    logging.debug('New Bucketised columns %s, Total columns %s', len(df.columns) - total_columns, len(df.columns))
 
     if converters is not None:
-        logging.debug('Applying converters on columns')
+        logging.debug('Converting columns')
         convert_columns(df, converters)
 
 
@@ -79,11 +72,11 @@ def read_prepared_data(data_path, imported_cols=None, num_groups=10, group_pick_
     test_set = testcv_grouped.head(test_group_pick).copy()
     cv_set = testcv_grouped.tail(cv_group_pick).copy()
 
-    logging.debug('Preparing test set...')
+    logging.debug('Preparing TEST set...')
     __prepare_data(test_set, bck_columns, converters)
-    logging.debug('Preparing cv set...')
+    logging.debug('Preparing CV set...')
     __prepare_data(cv_set, bck_columns, converters)
-    logging.debug('Preparing train set...')
+    logging.debug('Preparing TRAINING set...')
     __prepare_data(train_set, bck_columns, converters)
 
     make_compatible(cv_set, train_set)
