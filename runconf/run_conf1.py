@@ -22,7 +22,8 @@ def get_run_conf():
         'PRODUCT_CD',
         'RECEIVER_SUBURB',
         'THOROUGHFARE_TYPE_CODE',
-        'SIDE'
+        'SIDE',
+        'PRODUCT_CD',
     ]
 
     bucketised_columns = [
@@ -34,35 +35,38 @@ def get_run_conf():
         'PRODUCT_CD',
         'RECEIVER_SUBURB',
         'THOROUGHFARE_TYPE_CODE',
-        'SIDE'
+        'SIDE',
+        'PRODUCT_CD',
     ]
 
     run_name = 'NN_run_conf_1'
-    num_groups, group_pick_size = 5, 6000
+    num_groups, group_pick_size = 5, 10000
 
-    evaluate_steps = 300
+    evaluate_steps = 10
     batch_data_size = 300
 
     data_config = run_data.get_data(feature_names, bucketised_columns,
                                     num_groups, group_pick_size)
     train_x = data_config.train_x
 
-    layers = [len(train_x.columns), 70, 50, 30]
+    layers = [1024, 512, 256]
 
     logging.debug('Creating NN with %s', layers)
-    # estimator = tf.contrib.learn.DNNRegressor(
-    #     feature_columns=[tf.contrib.layers.real_valued_column(col_name) for col_name in
-    #                      train_x.columns],
-    #     hidden_units=layers)
     estimator = tf.contrib.learn.DNNRegressor(
         feature_columns=[tf.contrib.layers.real_valued_column(col_name) for col_name in
                          train_x.columns],
-        hidden_units=layers,
-        activation_fn=tf.nn.tanh,
-        optimizer=tf.train.AdagradOptimizer(
-            learning_rate=0.001,
-            # l1_regularization_strength=0.001
-        ))
+        hidden_units=layers)
+    # estimator = tf.contrib.learn.DNNRegressor(
+    #     feature_columns=[tf.contrib.layers.real_valued_column(col_name) for col_name in
+    #                      train_x.columns],
+    #     hidden_units=layers,
+    #     # activation_fn=tf.nn.tanh,
+    #     optimizer=tf.train.ProximalAdagradOptimizer(
+    #         learning_rate=0.1,
+    #         l1_regularization_strength=0.0,
+    #         l2_regularization_strength=0.0
+    #     )
+    # )
 
     RunConf = collections.namedtuple('RunConf', ['feature_names',
                                                  'bucketised_columns',

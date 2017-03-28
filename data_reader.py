@@ -71,7 +71,8 @@ def read_prepared_data(data_path, imported_cols=None, num_groups=10, group_pick_
     testcv_grouped = testcv_set.groupby(groupby_col)
     test_set = testcv_grouped.head(test_group_pick).copy()
     cv_set = testcv_grouped.tail(cv_group_pick).copy()
-
+    logging.debug('Rows for sets, Train %s, CV %s, Test %s', len(train_set.index), len(cv_set.index),
+                  len(test_set.index))
     logging.debug('Preparing TEST set...')
     __prepare_data(test_set, bck_columns, converters)
     logging.debug('Preparing CV set...')
