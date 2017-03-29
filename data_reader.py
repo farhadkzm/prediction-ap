@@ -1,57 +1,17 @@
 import logging
 
-import numpy as np
 import pandas as pd
 
-import etl
 
-
-def read_csv(data_path, imported_cols):
-    return pd.read_csv(data_path, usecols=imported_cols)
-
-
-def __add_unique_values_as_columns(df, column):
-    for unique_val in df[column].unique():
-        new_col_name = column + '_' + filter(str.isalnum, str(unique_val))
-        df[new_col_name] = (df[column] == unique_val).astype(np.float32)
-
-
-def bucketised_columns(df, columns):
-    for col in columns:
-        __add_unique_values_as_columns(df, col)
-
-    # removing bucketised columns
-    df.drop(labels=columns, axis=1, inplace=True)
-
-
-def convert_columns(df, converters):
-    for column_name in converters.keys():
-        existing_column, converter = converters[column_name]
-        df[column_name] = df.apply(lambda row: converter(row[existing_column]), axis=1)
-        df.drop(labels=[existing_column], axis=1, inplace=True)
-
-
-def __prepare_data(df, bck_columns=None, converters=None):
-    total_columns = len(df.columns)
-    logging.debug('Bucketising columns')
-    if bck_columns is not None:
-        bucketised_columns(df, bck_columns)
-
-    logging.debug('New Bucketised columns %s, Total columns %s', len(df.columns) - total_columns, len(df.columns))
-
-    if converters is not None:
-        logging.debug('Converting columns')
-        convert_columns(df, converters)
-
-
-def read_prepared_data(data_path, imported_cols=None, num_groups=10, group_pick_size=3000, bck_columns=None,
-                       converters=None):
+def read_prepared_data(data_path, imported_cols=None, num_groups=10, group_pick_size=3000):
     logging.debug('Reading csv file %s', data_path)
-    df = read_csv(data_path, imported_cols)
+    df = pd.read_csv(data_path, usecols=imported_cols)
 
     groupby_col = 'RECEIVER_SUBURB'
-    working_set = etl.smart_split(df, groupby_col, num_groups, group_pick_size)
+    working_set = smart_split(df, groupby_col, num_groups, group_pick_size)
 
+    logging.debug('Converting columns...')
+    generate_inferred_columns(working_set)
     grouped = working_set.groupby(groupby_col)
 
     testcv_ratio = .4
@@ -59,7 +19,7 @@ def read_prepared_data(data_path, imported_cols=None, num_groups=10, group_pick_
     testcv_group_pick_size = int(group_pick_size * testcv_ratio)
     train_group_pick_size = group_pick_size - testcv_group_pick_size
 
-    logging.debug('Grouping %s. Items in each group %s. CV/Test items %s. Train items %s', groupby_col, group_pick_size,
+    logging.debug('Grouping column %s. Group size %s. CV/Test items %s. Train items %s', groupby_col, group_pick_size,
                   testcv_group_pick_size, train_group_pick_size)
 
     testcv_set = grouped.head(testcv_group_pick_size)
@@ -73,31 +33,36 @@ def read_prepared_data(data_path, imported_cols=None, num_groups=10, group_pick_
     cv_set = testcv_grouped.tail(cv_group_pick).copy()
     logging.debug('Rows for sets, Train %s, CV %s, Test %s', len(train_set.index), len(cv_set.index),
                   len(test_set.index))
-    logging.debug('Preparing TEST set...')
-    __prepare_data(test_set, bck_columns, converters)
-    logging.debug('Preparing CV set...')
-    __prepare_data(cv_set, bck_columns, converters)
-    logging.debug('Preparing TRAINING set...')
-    __prepare_data(train_set, bck_columns, converters)
-
-    make_compatible(cv_set, train_set)
-    make_compatible(test_set, train_set)
     return train_set, cv_set, test_set
 
 
-def make_compatible(cv, train):
-    cols_to_add_train = set(cv.columns) - set(train)
-    cols_to_add_cv = set(train.columns) - set(cv)
+def smart_split(df, groupby_col, number_of_group=10, group_pick_size=1000):
+    groups = df.groupby(groupby_col).size()
+    g1k = groups[groups > group_pick_size]
+    g1k = list(g1k.index)
+    df1k = df[df[groupby_col].isin(g1k)]
 
-    for col in cols_to_add_cv:
-        cv[col] = np.float32(0)
+    total_rows = number_of_group * group_pick_size
+    working_set = df1k.groupby(groupby_col).head(group_pick_size).sort_values(groupby_col).iloc[
+                  0:total_rows]
 
-    for col in cols_to_add_train:
-        train[col] = np.float32(0)
+    return working_set
 
 
-def split_x_y(df, label_column):
-    y = df[label_column]
-    df.drop(label_column, axis=1, inplace=True)
-    x = df
-    return x, y
+def generate_inferred_columns(df):
+    df['NUMERIC_ACCEPT_TIME'] = df.apply(lambda row: __convert_time_to_float(row['ACCEPT_TIME']), axis=1)
+
+    # The following usually used for categorical predictions
+    # Theory 1: map NUMERIC_TIME to a 2h window starting from last even hour
+    # Theory 2: map NUMERIC_TIME to a 2h window starting from the current hour
+    # Theory 3: map NUMERIC_TIME to a nearest hour
+
+    # Theory 4: instead of NUMERIC_TIME for y, use DELIVERY_TIME - NUMERIC_ACCEPT_TIME as y
+    df['DIFF_NUMERIC_TIME'] = df.apply(lambda row: row['NUMERIC_TIME'] - row['NUMERIC_ACCEPT_TIME'], axis=1)
+
+    pass
+
+
+def __convert_time_to_float(value):
+    digits = value.split(':')
+    return float(digits[0]) + (float(digits[1]) / 60.0)

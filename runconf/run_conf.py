@@ -1,6 +1,8 @@
 import collections
 import logging
+
 import tensorflow as tf
+
 import run_data
 
 
