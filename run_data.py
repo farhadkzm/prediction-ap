@@ -1,7 +1,9 @@
 import collections
-import data_reader
-import tensorflow as tf
+
 import numpy as np
+import tensorflow as tf
+
+import data_reader
 
 feature_names = [
     'ACCEPT_TIME',  # this will be converted to NUMERIC_ACCEPT_TIME
@@ -31,23 +33,52 @@ bucketised_columns = [
 ]
 
 
+def convert_bucket(feature, is_dnn=False):
+    if is_dnn:
+        return tf.contrib.layers.embedding_column(feature, dimension=8)
+    else:
+        return feature
+
+
+def convert_real(feature, boundaries, is_dnn=False):
+    if is_dnn:
+        return feature
+    else:
+        return tf.contrib.layers.bucketized_column(feature, boundaries=boundaries)
+
+
 def create_features():
+    is_dnn = False
     # building columns
+    delivery_weekday = tf.contrib.layers.sparse_column_with_integerized_feature('DELIVERY_WEEKDAY', bucket_size=1000)
+    suburb = tf.contrib.layers.sparse_column_with_hash_bucket('RECEIVER_SUBURB', hash_bucket_size=1000)
+    delivery_weekday__x__suburb = tf.contrib.layers.crossed_column([delivery_weekday, suburb],
+                                                                   hash_bucket_size=int(1e6))
+
     bucketised_features = [
-        tf.contrib.layers.sparse_column_with_integerized_feature('DELIVERY_WEEKDAY', bucket_size=1000),
+        delivery_weekday,
+        suburb,
+        # delivery_weekday__x__suburb,
+
         tf.contrib.layers.sparse_column_with_hash_bucket('CONTRACT_ID', hash_bucket_size=1000),
+
         tf.contrib.layers.sparse_column_with_hash_bucket('USER_ROLE', hash_bucket_size=1000),
-        tf.contrib.layers.sparse_column_with_hash_bucket('DEVICE_USER_ID', hash_bucket_size=1000),
+
+        tf.contrib.layers.sparse_column_with_hash_bucket('DEVICE_USER_ID',
+                                                         hash_bucket_size=1000),
+
         tf.contrib.layers.sparse_column_with_hash_bucket('SCAN_EVENT_CD', hash_bucket_size=1000),
+
         tf.contrib.layers.sparse_column_with_integerized_feature('PRODUCT_CD', bucket_size=1000),
-        tf.contrib.layers.sparse_column_with_hash_bucket('RECEIVER_SUBURB', hash_bucket_size=1000),
-        tf.contrib.layers.sparse_column_with_hash_bucket('THOROUGHFARE_TYPE_CODE', hash_bucket_size=1000),
-        tf.contrib.layers.sparse_column_with_hash_bucket('SIDE', hash_bucket_size=1000),
+
+        tf.contrib.layers.sparse_column_with_hash_bucket('THOROUGHFARE_TYPE_CODE',
+                                                         hash_bucket_size=1000),
     ]
     real_value_features = [
         tf.contrib.layers.real_valued_column('NUMERIC_ACCEPT_TIME'),
+        # convert_real(tf.contrib.layers.real_valued_column('NUMERIC_ACCEPT_TIME'), [i for i in range(24)], is_dnn),
     ]
-    return bucketised_features + real_value_features
+    return [convert_bucket(feature, is_dnn) for feature in bucketised_features] + real_value_features
 
 
 def get_data():
@@ -68,6 +99,7 @@ def get_data():
     ])
 
     label_column = 'NUMERIC_TIME'
+    # label_column = 'DIFF_NUMERIC_TIME'
     run_config = RunData(create_features()
                          , total_iterations
                          , lambda index: train_input_fn(train_set, train_set[label_column], index, batch_data_size)

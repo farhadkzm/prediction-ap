@@ -5,7 +5,7 @@ import tensorflow as tf
 
 
 def get_run_conf(feature_columns):
-    run_name = 'NN_run_conf_1'
+    run_name = 'linear_boundries_on_real_values'
 
     evaluate_steps = 10
 
@@ -15,15 +15,14 @@ def get_run_conf(feature_columns):
     estimator = tf.contrib.learn.LinearRegressor(
         feature_columns=feature_columns)
     # estimator = tf.contrib.learn.DNNRegressor(
-    #     feature_columns=[tf.contrib.layers.real_valued_column(col_name) for col_name in
-    #                      train_x.columns],
+    #     feature_columns=feature_columns,
     #     hidden_units=layers,
-    #     # activation_fn=tf.nn.tanh,
-    #     optimizer=tf.train.ProximalAdagradOptimizer(
-    #         learning_rate=0.1,
-    #         l1_regularization_strength=0.0,
-    #         l2_regularization_strength=0.0
-    #     )
+        # activation_fn=tf.nn.tanh,
+        # optimizer=tf.train.ProximalAdagradOptimizer(
+        #     learning_rate=0.1,
+        #     l1_regularization_strength=0.0,
+        #     l2_regularization_strength=0.0
+        # )
     # )
 
     RunConf = collections.namedtuple('RunConf', [
