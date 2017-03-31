@@ -12,18 +12,18 @@ def get_run_conf(feature_columns):
     layers = [1024, 512, 256]
 
     logging.debug('Creating NN with %s', layers)
-    estimator = tf.contrib.learn.LinearRegressor(
-        feature_columns=feature_columns)
-    # estimator = tf.contrib.learn.DNNRegressor(
-    #     feature_columns=feature_columns,
-    #     hidden_units=layers,
+    # estimator = tf.contrib.learn.LinearRegressor(
+    #     feature_columns=feature_columns)
+    estimator = tf.contrib.learn.DNNRegressor(
+        feature_columns=feature_columns,
+        hidden_units=layers,
         # activation_fn=tf.nn.tanh,
         # optimizer=tf.train.ProximalAdagradOptimizer(
         #     learning_rate=0.1,
         #     l1_regularization_strength=0.0,
         #     l2_regularization_strength=0.0
         # )
-    # )
+    )
 
     RunConf = collections.namedtuple('RunConf', [
 

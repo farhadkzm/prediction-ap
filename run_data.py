@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 import data_reader
-
+from datetime import datetime
 feature_names = [
     'ACCEPT_TIME',  # this will be converted to NUMERIC_ACCEPT_TIME
     'NUMERIC_TIME',
@@ -48,7 +48,7 @@ def convert_real(feature, boundaries, is_dnn=False):
 
 
 def create_features():
-    is_dnn = False
+    is_dnn = True
     # building columns
     delivery_weekday = tf.contrib.layers.sparse_column_with_integerized_feature('DELIVERY_WEEKDAY', bucket_size=1000)
     suburb = tf.contrib.layers.sparse_column_with_hash_bucket('RECEIVER_SUBURB', hash_bucket_size=1000)
@@ -82,8 +82,8 @@ def create_features():
 
 
 def get_data():
-    batch_data_size = 300
-    num_groups, group_pick_size = 5, 10000
+    batch_data_size = 1000
+    num_groups, group_pick_size = 2, 10000
     train_set, cv_set, test_set = data_reader.read_prepared_data('./data/train.csv', feature_names, num_groups,
                                                                  group_pick_size)
 
@@ -105,7 +105,7 @@ def get_data():
                          , lambda index: train_input_fn(train_set, train_set[label_column], index, batch_data_size)
                          , lambda: input_fn(train_set, train_set[label_column])
                          , lambda: input_fn(cv_set, cv_set[label_column])
-                         , lambda predicted: custom_error(predicted, cv_set[label_column]))
+                         , lambda predicted: custom_error(predicted, cv_set, label_column))
 
     return run_config
 
@@ -134,5 +134,13 @@ def train_input_fn(train_x, train_y, index, batch_size):
     return input_fn(train_x[start:end], train_y[start:end])
 
 
-def custom_error(predicted, cv_y):
-    return (abs(predicted - np.array(cv_y.values)) > 2).sum()
+def custom_error(predicted, cv_set, label_column):
+
+    analysed_errors = (abs(predicted - np.array(cv_set[label_column].values)) > 2)
+    error_indices = np.where(analysed_errors > 0)
+    errors = cv_set.iloc[error_indices]
+    corrects = cv_set.iloc[np.where(analysed_errors == 0)]
+    file_path = "./logdir/errs/{}".format(datetime.now().strftime('%Y_%m_%d__%H_%M_%S_%f'))
+    errors.to_csv(file_path+"-errors.csv")
+    corrects.to_csv(file_path+"-corrects.csv")
+    return analysed_errors.sum()
