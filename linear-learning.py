@@ -40,7 +40,7 @@ with tf.Session() as sess:
         logging.debug('Starting fitting for step %s/%s', i + 1, total_iterations)
         estimator.partial_fit(input_fn=(lambda: data_config.train_batch_input_fn(i)))
 
-        if i % 10 == 0 or i + 1 == total_iterations:
+        if  i + 1 == total_iterations:
             logging.debug('Aggregating statistics...')
             summary = tf.Summary()
 

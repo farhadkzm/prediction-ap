@@ -157,7 +157,7 @@ def custom_error(predicted, cv_set, label_column):
         raise Exception("size of predicted result is not as cv set")
 
     prediction_diff = predicted - np.array(cv_set[label_column].values)
-    analysed_errors = (prediction_diff > 3.0) | (prediction_diff < -2.0)
+    analysed_errors = (abs(prediction_diff + .75) > 2.0)
     error_indices = np.where(analysed_errors > 0)
     errors = cv_set.iloc[error_indices].copy()
     errors['PREDICTION_DIFF'] = prediction_diff[error_indices]
