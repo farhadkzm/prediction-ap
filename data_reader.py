@@ -1,11 +1,11 @@
 import logging
-
+import numpy as np
 import pandas as pd
 
 
 def read_prepared_data(data_path, imported_cols=None, num_groups=10, group_pick_size=3000):
     logging.debug('Reading csv file %s', data_path)
-    df = pd.read_csv(data_path, usecols=imported_cols)
+    df = pd.read_csv(data_path, usecols=imported_cols,dtype={ 'RECEIVER_DPID': str})
 
     groupby_col = 'RECEIVER_SUBURB'
     working_set = smart_split(df, groupby_col, num_groups, group_pick_size)

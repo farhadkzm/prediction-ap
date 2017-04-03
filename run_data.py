@@ -1,10 +1,17 @@
 import collections
+from datetime import datetime
 
 import numpy as np
 import tensorflow as tf
 
 import data_reader
-from datetime import datetime
+
+# ACCEPT_TIME,ADDRESS_CLUSTER,ARTICLE_ID,
+# CONTRACT_ID,DELIVERY_DATE,DELIVERY_TIME,DELIVERY_WEEKDAY,
+# DEVICE_USER_ID,EVENT_TIMESTAMP,NUMERIC_TIME,PRODUCT_CD,
+# RECEIVER_DPID,RECEIVER_SUBURB,SCAN_EVENT_CD,SCAN_SOURCE_DEVICE,
+# SIDE,THOROUGHFARE_TYPE_CODE,USER_ROLE,WORK_CENTRE_CD
+
 feature_names = [
     'ACCEPT_TIME',  # this will be converted to NUMERIC_ACCEPT_TIME
     'NUMERIC_TIME',
@@ -15,20 +22,24 @@ feature_names = [
     'SCAN_EVENT_CD',
     'PRODUCT_CD',
     'RECEIVER_SUBURB',
+    'RECEIVER_DPID',
     'THOROUGHFARE_TYPE_CODE',
     'SIDE',
-    'PRODUCT_CD',
+     'PRODUCT_CD',
 ]
 
 bucketised_columns = [
     'DELIVERY_WEEKDAY',
+    'RECEIVER_SUBURB',
+    'RECEIVER_DPID',
+    'THOROUGHFARE_TYPE_CODE',
+
     'CONTRACT_ID',
     'USER_ROLE',
     'DEVICE_USER_ID',
     'SCAN_EVENT_CD',
-    'PRODUCT_CD',
-    'RECEIVER_SUBURB',
-    'THOROUGHFARE_TYPE_CODE',
+     'PRODUCT_CD',
+
     'SIDE',
 ]
 
@@ -55,10 +66,19 @@ def create_features():
     delivery_weekday__x__suburb = tf.contrib.layers.crossed_column([delivery_weekday, suburb],
                                                                    hash_bucket_size=int(1e6))
 
+    receiver_dpid = tf.contrib.layers.sparse_column_with_hash_bucket('RECEIVER_DPID', hash_bucket_size=1e4)
+    thoroughfare_type_code = tf.contrib.layers.sparse_column_with_hash_bucket('THOROUGHFARE_TYPE_CODE',
+                                                                              hash_bucket_size=1e4)
+    rec_dpid__x__thoroughfare = tf.contrib.layers.crossed_column([receiver_dpid, thoroughfare_type_code],
+                                                                  hash_bucket_size=int(1e6))
     bucketised_features = [
         delivery_weekday,
         suburb,
-        # delivery_weekday__x__suburb,
+        delivery_weekday__x__suburb,
+
+        receiver_dpid,
+        thoroughfare_type_code,
+        rec_dpid__x__thoroughfare,
 
         tf.contrib.layers.sparse_column_with_hash_bucket('CONTRACT_ID', hash_bucket_size=1000),
 
@@ -71,8 +91,6 @@ def create_features():
 
         tf.contrib.layers.sparse_column_with_integerized_feature('PRODUCT_CD', bucket_size=1000),
 
-        tf.contrib.layers.sparse_column_with_hash_bucket('THOROUGHFARE_TYPE_CODE',
-                                                         hash_bucket_size=1000),
     ]
     real_value_features = [
         tf.contrib.layers.real_valued_column('NUMERIC_ACCEPT_TIME'),
@@ -82,8 +100,8 @@ def create_features():
 
 
 def get_data():
-    batch_data_size = 1000
-    num_groups, group_pick_size = 2, 10000
+    batch_data_size = 300
+    num_groups, group_pick_size = 1, 15000
     train_set, cv_set, test_set = data_reader.read_prepared_data('./data/train.csv', feature_names, num_groups,
                                                                  group_pick_size)
 
@@ -135,12 +153,20 @@ def train_input_fn(train_x, train_y, index, batch_size):
 
 
 def custom_error(predicted, cv_set, label_column):
+    if len(predicted) != len(cv_set.index):
+        raise Exception("size of predicted result is not as cv set")
 
-    analysed_errors = (abs(predicted - np.array(cv_set[label_column].values)) > 2)
+    prediction_diff = predicted - np.array(cv_set[label_column].values)
+    analysed_errors = (prediction_diff > 3.0) | (prediction_diff < -2.0)
     error_indices = np.where(analysed_errors > 0)
-    errors = cv_set.iloc[error_indices]
-    corrects = cv_set.iloc[np.where(analysed_errors == 0)]
+    errors = cv_set.iloc[error_indices].copy()
+    errors['PREDICTION_DIFF'] = prediction_diff[error_indices]
+
+    correct_indices = np.where(analysed_errors == 0)
+    corrects = cv_set.iloc[correct_indices].copy()
+    corrects['PREDICTION_DIFF'] = prediction_diff[correct_indices]
+
     file_path = "./logdir/errs/{}".format(datetime.now().strftime('%Y_%m_%d__%H_%M_%S_%f'))
-    errors.to_csv(file_path+"-errors.csv")
-    corrects.to_csv(file_path+"-corrects.csv")
+    errors.to_csv(file_path + "-errors.csv")
+    corrects.to_csv(file_path + "-corrects.csv")
     return analysed_errors.sum()
