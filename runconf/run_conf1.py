@@ -9,7 +9,7 @@ def get_run_conf(feature_columns):
 
     evaluate_steps = 10
 
-    layers = [3000, 1000, 50]
+    layers = [1000, 512, 50]
 
     logging.debug('Creating NN with %s', layers)
     # estimator = tf.contrib.learn.LinearRegressor(

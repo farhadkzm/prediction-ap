@@ -22,10 +22,11 @@ feature_names = [
     'SCAN_EVENT_CD',
     'PRODUCT_CD',
     'RECEIVER_SUBURB',
+    'ADDRESS_CLUSTER',
     'RECEIVER_DPID',
     'THOROUGHFARE_TYPE_CODE',
     'SIDE',
-     'PRODUCT_CD',
+    'PRODUCT_CD',
 ]
 
 bucketised_columns = [
@@ -33,7 +34,7 @@ bucketised_columns = [
     'RECEIVER_SUBURB',
     'RECEIVER_DPID',
     'THOROUGHFARE_TYPE_CODE',
-
+    'ADDRESS_CLUSTER',
     'CONTRACT_ID',
     'USER_ROLE',
     'DEVICE_USER_ID',
@@ -66,17 +67,24 @@ def create_features():
     delivery_weekday__x__suburb = tf.contrib.layers.crossed_column([delivery_weekday, suburb],
                                                                    hash_bucket_size=int(1e6))
 
+    address_cluster = tf.contrib.layers.sparse_column_with_hash_bucket('ADDRESS_CLUSTER', hash_bucket_size=1e5)
+
     receiver_dpid = tf.contrib.layers.sparse_column_with_hash_bucket('RECEIVER_DPID', hash_bucket_size=1e4)
     thoroughfare_type_code = tf.contrib.layers.sparse_column_with_hash_bucket('THOROUGHFARE_TYPE_CODE',
                                                                               hash_bucket_size=1e4)
     rec_dpid__x__thoroughfare = tf.contrib.layers.crossed_column([receiver_dpid, thoroughfare_type_code],
+                                                                  hash_bucket_size=int(1e6))
+    rec_dpid__x__address_cluster = tf.contrib.layers.crossed_column([receiver_dpid, address_cluster],
                                                                   hash_bucket_size=int(1e6))
     bucketised_features = [
         delivery_weekday,
         suburb,
         delivery_weekday__x__suburb,
 
+        address_cluster,
         receiver_dpid,
+        rec_dpid__x__address_cluster,
+
         thoroughfare_type_code,
         rec_dpid__x__thoroughfare,
 
@@ -157,7 +165,7 @@ def custom_error(predicted, cv_set, label_column):
         raise Exception("size of predicted result is not as cv set")
 
     prediction_diff = predicted - np.array(cv_set[label_column].values)
-    analysed_errors = (abs(prediction_diff + .75) > 2.0)
+    analysed_errors = (abs(prediction_diff -2) > 2.0)
     error_indices = np.where(analysed_errors > 0)
     errors = cv_set.iloc[error_indices].copy()
     errors['PREDICTION_DIFF'] = prediction_diff[error_indices]
